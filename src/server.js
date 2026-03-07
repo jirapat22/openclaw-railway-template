@@ -988,6 +988,102 @@ function createTuiWebSocketServer(httpServer) {
   return wss;
 }
 
+// ========== SHELL: BASH PTY VIA WEBSOCKET ==========
+
+let activeShellSession = null;
+
+function createShellWebSocketServer() {
+  const wss = new WebSocketServer({ noServer: true });
+
+  wss.on("connection", (ws, req) => {
+    const clientIp = req.socket?.remoteAddress || "unknown";
+    console.log(`[shell] session started from ${clientIp}`);
+
+    let ptyProcess = null;
+    let idleTimer = null;
+    let maxSessionTimer = null;
+
+    activeShellSession = { ws, startedAt: Date.now(), lastActivity: Date.now() };
+
+    function resetIdleTimer() {
+      if (activeShellSession) activeShellSession.lastActivity = Date.now();
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        console.log("[shell] session idle timeout");
+        ws.close(4002, "Idle timeout");
+      }, TUI_IDLE_TIMEOUT_MS);
+    }
+
+    function spawnPty(cols, rows) {
+      if (ptyProcess) return;
+      console.log(`[shell] spawning bash PTY with ${cols}x${rows}`);
+      ptyProcess = pty.spawn("bash", [], {
+        name: "xterm-256color",
+        cols,
+        rows,
+        cwd: WORKSPACE_DIR,
+        env: {
+          ...process.env,
+          OPENCLAW_STATE_DIR: STATE_DIR,
+          OPENCLAW_WORKSPACE_DIR: WORKSPACE_DIR,
+          TERM: "xterm-256color",
+          HOME: process.env.HOME || "/home/openclaw",
+        },
+      });
+
+      idleTimer = setTimeout(() => {
+        console.log("[shell] session idle timeout");
+        ws.close(4002, "Idle timeout");
+      }, TUI_IDLE_TIMEOUT_MS);
+
+      maxSessionTimer = setTimeout(() => {
+        console.log("[shell] max session duration reached");
+        ws.close(4002, "Max session duration");
+      }, TUI_MAX_SESSION_MS);
+
+      ptyProcess.onData((data) => {
+        if (ws.readyState === ws.OPEN) ws.send(data);
+      });
+
+      ptyProcess.onExit(({ exitCode, signal }) => {
+        console.log(`[shell] PTY exited code=${exitCode} signal=${signal}`);
+        if (ws.readyState === ws.OPEN) ws.close(1000, "Process exited");
+      });
+    }
+
+    ws.on("message", (message) => {
+      resetIdleTimer();
+      try {
+        const msg = JSON.parse(message.toString());
+        if (msg.type === "resize" && msg.cols && msg.rows) {
+          const cols = Math.min(Math.max(msg.cols, 10), 500);
+          const rows = Math.min(Math.max(msg.rows, 5), 200);
+          if (!ptyProcess) spawnPty(cols, rows);
+          else ptyProcess.resize(cols, rows);
+        } else if (msg.type === "input" && msg.data && ptyProcess) {
+          ptyProcess.write(msg.data);
+        }
+      } catch (err) {
+        console.warn(`[shell] invalid message: ${err.message}`);
+      }
+    });
+
+    ws.on("close", () => {
+      console.log("[shell] session closed");
+      clearTimeout(idleTimer);
+      clearTimeout(maxSessionTimer);
+      if (ptyProcess) { try { ptyProcess.kill(); } catch {} }
+      activeShellSession = null;
+    });
+
+    ws.on("error", (err) => {
+      console.error(`[shell] WebSocket error: ${err.message}`);
+    });
+  });
+
+  return wss;
+}
+
 // ========== DEBUG CONSOLE: HELPER FUNCTIONS & ALLOWLIST ==========
 
 // Extract device requestIds from device list output for validation
@@ -1278,6 +1374,11 @@ app.get("/tui", requireSetupAuth, (_req, res) => {
   res.sendFile(path.join(process.cwd(), "src", "public", "tui.html"));
 });
 
+// ========== SHELL ROUTE ==========
+app.get("/shell", requireSetupAuth, (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "src", "public", "tui.html"));
+});
+
 app.get("/setup/export", requireSetupAuth, async (_req, res) => {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
@@ -1451,9 +1552,27 @@ const server = app.listen(PORT, () => {
 });
 
 const tuiWss = createTuiWebSocketServer(server);
+const shellWss = createShellWebSocketServer();
 
 server.on("upgrade", async (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (url.pathname === "/shell/ws") {
+    if (!verifyTuiAuth(req)) {
+      socket.write("HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"OpenClaw Shell\"\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    if (activeShellSession) {
+      socket.write("HTTP/1.1 409 Conflict\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    shellWss.handleUpgrade(req, socket, head, (ws) => {
+      shellWss.emit("connection", ws, req);
+    });
+    return;
+  }
 
   if (url.pathname === "/tui/ws") {
     if (!ENABLE_WEB_TUI) {

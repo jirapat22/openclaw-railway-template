@@ -81,7 +81,8 @@
 
     function getWsUrl() {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
-      return `${proto}//${location.host}/tui/ws`;
+      const wsPath = params.get("ws") || "/tui/ws";
+      return `${proto}//${location.host}${wsPath}`;
     }
 
     function getAuthProtocol() {
