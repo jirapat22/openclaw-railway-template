@@ -1375,7 +1375,10 @@ app.get("/tui", requireSetupAuth, (_req, res) => {
 });
 
 // ========== SHELL ROUTE ==========
-app.get("/shell", requireSetupAuth, (_req, res) => {
+app.get("/shell", requireSetupAuth, (req, res) => {
+  if (!req.query.ws) {
+    return res.redirect("/shell?ws=/shell/ws");
+  }
   res.sendFile(path.join(process.cwd(), "src", "public", "tui.html"));
 });
 
