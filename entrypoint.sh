@@ -28,4 +28,14 @@ else
   fi
 fi
 
+# Restore gog CLI config from persistent volume so OAuth tokens survive redeploys
+GOG_DATA_DIR="/data/.gogcli"
+GOG_HOME_DIR="/home/openclaw/.config/gogcli"
+if [ -d "$GOG_DATA_DIR" ]; then
+  mkdir -p "$GOG_HOME_DIR"
+  cp -r "$GOG_DATA_DIR/." "$GOG_HOME_DIR/"
+  chown -R openclaw:openclaw "$GOG_HOME_DIR"
+  echo "[entrypoint] Restored gog config from volume"
+fi
+
 exec gosu openclaw node src/server.js
