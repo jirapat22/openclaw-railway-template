@@ -108,7 +108,7 @@ const OPENCLAW_NODE = process.env.OPENCLAW_NODE?.trim() || "node";
 
 const ENABLE_WEB_TUI = process.env.ENABLE_WEB_TUI?.toLowerCase() === "true";
 const TUI_IDLE_TIMEOUT_MS = Number.parseInt(
-  process.env.TUI_IDLE_TIMEOUT_MS ?? "300000",
+  process.env.TUI_IDLE_TIMEOUT_MS ?? "1800000",
   10,
 );
 const TUI_MAX_SESSION_MS = Number.parseInt(
