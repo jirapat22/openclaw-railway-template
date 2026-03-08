@@ -112,7 +112,7 @@ const TUI_IDLE_TIMEOUT_MS = Number.parseInt(
   10,
 );
 const TUI_MAX_SESSION_MS = Number.parseInt(
-  process.env.TUI_MAX_SESSION_MS ?? "1800000",
+  process.env.TUI_MAX_SESSION_MS ?? "14400000",
   10,
 );
 
@@ -1038,6 +1038,8 @@ function createShellWebSocketServer() {
           OPENCLAW_WORKSPACE_DIR: WORKSPACE_DIR,
           TERM: "xterm-256color",
           HOME: process.env.HOME || "/home/openclaw",
+          GOG_ACCOUNT: process.env.GOG_ACCOUNT || "",
+          GOG_KEYRING_PASSWORD: process.env.GOG_KEYRING_PASSWORD ?? "",
         },
       });
 
