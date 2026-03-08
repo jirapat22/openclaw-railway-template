@@ -87,7 +87,7 @@
 
     function getAuthProtocol() {
       if (!password) return [];
-      const encoded = btoa(`user:${password}`);
+      const encoded = btoa(`user:${password}`).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
       return [`auth-${encoded}`];
     }
 
