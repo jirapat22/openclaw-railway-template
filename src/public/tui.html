@@ -82,13 +82,17 @@
     function getWsUrl() {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       const wsPath = params.get("ws") || "/tui/ws";
-      return `${proto}//${location.host}${wsPath}`;
+      const url = new URL(`${proto}//${location.host}${wsPath}`);
+      if (password) url.searchParams.set("pwd", password);
+      return url.toString();
     }
 
     function getAuthProtocol() {
       if (!password) return [];
-      const encoded = btoa(`user:${password}`).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      return [`auth-${encoded}`];
+      try {
+        const encoded = btoa(`user:${password}`).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        return [`auth-${encoded}`];
+      } catch { return []; }
     }
 
     function connect() {

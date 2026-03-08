@@ -847,6 +847,16 @@ function redactSecrets(text) {
 
 function verifyTuiAuth(req) {
   if (!SETUP_PASSWORD) return false;
+  // Check query string pwd parameter (browsers can't set custom headers on WebSocket)
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const queryPwd = url.searchParams.get("pwd");
+    if (queryPwd) {
+      const passwordHash = crypto.createHash("sha256").update(queryPwd).digest();
+      const expectedHash = crypto.createHash("sha256").update(SETUP_PASSWORD).digest();
+      if (crypto.timingSafeEqual(passwordHash, expectedHash)) return true;
+    }
+  } catch { /* ignore URL parse errors */ }
   // Check Authorization header (Basic auth)
   const authHeader = req.headers["authorization"] || "";
   if (authHeader.startsWith("Basic ")) {
